@@ -8,272 +8,173 @@ import rateLimit from "express-rate-limit"
 dotenv.config()
 
 const app = express()
-
-// Determine environment
 const isProduction = process.env.NODE_ENV === 'production'
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-    },
-  },
-  crossOriginResourcePolicy: { policy: "cross-origin" }
-}))
+// ==================== FIXED CORS CONFIGURATION ====================
+const allowedOrigins = [
+  // Development
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:3000',
+  
+  // Your CURRENT Render domain
+  'https://blog-backend-6-k4g8.onrender.com',
+  
+  // Your frontend when deployed
+  // 'https://your-actual-frontend.com'
+];
 
-// Production CORS configuration
-const allowedOrigins = []
+console.log('🌐 CORS Allowed Origins:', allowedOrigins);
 
-// Add production domains - REPLACE THESE WITH YOUR ACTUAL DOMAINS
-if (isProduction) {
-  allowedOrigins.push(
-    'https://your-frontend-domain.com',  // Your production frontend
-    'https://www.your-frontend-domain.com'  // With www
-  )
-  console.log('🔒 Production mode - CORS restricted to production domains')
-} else {
-  // Development - allow localhost
-  allowedOrigins.push(
-    'http://localhost:5173',
-    'http://localhost:3000',
-    'http://localhost:5174',
-    'https://blog-backend-4-jqh7.onrender.com'
-  )
-  console.log('🚀 Development mode - CORS allows localhost')
-}
-
-// Add Railway domain for testing
-allowedOrigins.push('https://blog-backend-4-jqh7.onrender.com')
-
-const corsOptions = {
+// Apply CORS
+app.use(cors({
   origin: function (origin, callback) {
-    // Allow requests with no origin (like mobile apps, curl, server-to-server)
+    // Allow requests with no origin
     if (!origin) return callback(null, true);
     
-    if (allowedOrigins.indexOf(origin) === -1) {
-      // Log unauthorized origins
-      console.warn(`🚫 CORS blocked request from origin: ${origin}`);
-      const msg = 'The CORS policy for this site does not allow access from the specified Origin.';
-      return callback(new Error(msg), false);
+    if (allowedOrigins.includes(origin)) {
+      console.log(`✅ CORS allowed: ${origin}`);
+      return callback(null, true);
+    } else {
+      console.log(`🚫 CORS blocked: ${origin}`);
+      return callback(new Error('CORS not allowed'), false);
     }
-    
-    console.log(`✅ CORS allowed request from origin: ${origin}`);
-    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
-  exposedHeaders: ['Content-Length'],
-  maxAge: 86400,  // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 204
-}
-
-app.use(cors(corsOptions));
-
-// Handle preflight requests for all routes
-app.options('*', cors(corsOptions));
-
-// Body parser middleware
-app.use(express.json({
-  limit: "10mb"
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-app.use(express.urlencoded({
-  extended: true,
-  limit: "10mb"
-}));
+// Handle preflight
+app.options('*', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(200);
+});
+// ==================== END CORS ====================
 
-const port = process.env.PORT || 3000;
+app.use(helmet())
+app.use(express.json({ limit: "10mb" }))
+app.use(express.urlencoded({ extended: true, limit: "10mb" }))
+
+const port = process.env.PORT || 3000
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: isProduction ? 50 : 100, // More lenient in development
-  message: {
-    success: false,
-    error: 'Too many requests from this IP, please try again later.'
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
+  windowMs: 15 * 60 * 1000,
+  max: isProduction ? 50 : 100,
+  message: { success: false, error: 'Too many requests' }
+})
+app.use('/askAi', limiter)
 
-app.use('/askAi', limiter);
-
-// Validate API key is set
-if (!process.env.CEREBRAS_API_KEY) {
-  console.error('❌ FATAL: CEREBRAS_API_KEY environment variable is not set');
-  
-  if (isProduction) {
-    process.exit(1);
-  } else {
-    console.warn('⚠️  Development mode: Running without Cerebras API key');
-  }
-}
-
-let client;
+// Initialize Cerebras
+let client
 if (process.env.CEREBRAS_API_KEY) {
-  client = new Cerebras({
-    apiKey: process.env.CEREBRAS_API_KEY
-  });
-  console.log('✅ Cerebras client initialized');
+  client = new Cerebras({ apiKey: process.env.CEREBRAS_API_KEY })
+  console.log('✅ Cerebras client initialized')
 } else {
-  console.warn('⚠️  Cerebras client not initialized - no API key');
+  console.warn('⚠️ No Cerebras API key - running in test mode')
 }
 
-// Health check endpoint
+// Health endpoint
 app.get('/health', (req, res) => {
-  res.status(200).json({
+  res.json({
     status: 'healthy',
     timestamp: new Date().toISOString(),
     service: 'blog-backend-api',
     environment: isProduction ? 'production' : 'development',
-    cors_allowed_origins: allowedOrigins
-  });
-});
+    cors_allowed_origins: allowedOrigins,
+    current_domain: 'https://blog-backend-6-k4g8.onrender.com'
+  })
+})
 
-app.get("/", (req, res) => {
+app.get('/', (req, res) => {
   res.json({
-    status: "Server is running",
-    message: "Blog Backend API",
-    version: "1.0.0",
-    environment: isProduction ? 'production' : 'development',
-    endpoints: {
-      health: "GET /health",
-      askAi: "POST /askAi"
-    },
-    cors: {
-      allowed_origins: allowedOrigins,
-      note: isProduction ? 'Production mode - restricted domains' : 'Development mode - includes localhost'
-    }
-  });
-});
-
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path} - Origin: ${req.headers.origin || 'none'}`);
-  next();
-});
+    message: 'Blog Backend API',
+    version: '2.0.0',
+    domain: 'https://blog-backend-6-k4g8.onrender.com',
+    cors_enabled_for: allowedOrigins
+  })
+})
 
 // AI endpoint
 app.post('/askAi', async (req, res) => {
   try {
-    // Check if client is initialized
+    console.log(`🤖 Request from: ${req.headers.origin || 'unknown'}`)
+    
     if (!client) {
-      return res.status(500).json({
-        success: false,
-        error: "AI service is not configured",
-        details: isProduction ? undefined : "CEREBRAS_API_KEY environment variable is not set"
-      });
+      // Test mode - return mock response
+      const { message } = req.body
+      return res.json({
+        success: true,
+        data: {
+          text: `Mock AI Response for: "${message}"\n\nThis is a test response. When Cerebras API key is configured, real AI responses will be returned.\n\nImage suggestions: Use relevant stock photos related to ${message}.`
+        },
+        meta: { model: 'test-mode', tokens: 42 }
+      })
     }
 
-    const { message } = req.body;
+    const { message } = req.body
     
     if (!message || typeof message !== 'string' || message.trim().length === 0) {
       return res.status(400).json({
         success: false,
-        error: "Message is required and must be a non-empty string"
-      });
+        error: "Message is required"
+      })
     }
 
-    // Limit message length
-    if (message.length > 5000) {
-      return res.status(400).json({
-        success: false,
-        error: "Message too long. Maximum 5000 characters."
-      });
-    }
-
-    console.log(`🤖 Processing AI request: ${message.substring(0, 100)}...`);
+    console.log(`Processing: ${message.substring(0, 100)}...`)
 
     const chatCompletion = await client.chat.completions.create({
       messages: [{ role: 'user', content: message }],
       model: 'llama3.1-8b',
-      max_tokens: 1500,
+      max_tokens: 1000,
       temperature: 0.7,
-    });
+    })
 
-    const text = chatCompletion?.choices[0]?.message?.content;
+    const text = chatCompletion?.choices[0]?.message?.content
     
     if (!text) {
-      throw new Error('No response from AI model');
+      throw new Error('No response from AI model')
     }
 
-    console.log(`✅ AI response generated (${text.length} characters)`);
-
+    console.log(`✅ Response generated (${text.length} chars)`)
+    
     res.json({
       success: true,
-      data: {
-        text: text
-      },
+      data: { text },
       meta: {
         model: 'llama3.1-8b',
         tokens: chatCompletion?.usage?.total_tokens
       }
-    });
+    })
 
   } catch (error) {
-    console.error("❌ Cerebras API Error:", error);
-    
-    // Handle specific Cerebras API errors
-    if (error.status === 401) {
-      return res.status(401).json({
-        success: false,
-        error: "Invalid API key"
-      });
-    }
-    
-    if (error.status === 429) {
-      return res.status(429).json({
-        success: false,
-        error: "Rate limit exceeded. Please try again later."
-      });
-    }
-    
+    console.error('❌ AI Error:', error.message)
     res.status(500).json({
       success: false,
-      error: "Failed to get response from AI",
+      error: "AI service error",
       details: !isProduction ? error.message : undefined
-    });
+    })
   }
-});
+})
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error('🔥 Error:', err);
-  
-  if (err.name === 'CorsError') {
-    return res.status(403).json({
-      success: false,
-      error: 'CORS Error',
-      message: 'Not allowed by CORS policy',
-      allowed_origins: allowedOrigins
-    });
-  }
-  
-  res.status(err.status || 500).json({
-    success: false,
-    error: 'Internal Server Error',
-    message: isProduction ? 'Something went wrong' : err.message
-  });
-});
-
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    error: 'Not Found',
-    message: `Cannot ${req.method} ${req.originalUrl}`
-  });
-});
+// Test CORS endpoint
+app.get('/test-cors', (req, res) => {
+  res.json({
+    success: true,
+    message: 'CORS is working!',
+    your_origin: req.headers.origin,
+    allowed: allowedOrigins.includes(req.headers.origin || ''),
+    allowed_origins: allowedOrigins
+  })
+})
 
 app.listen(port, () => {
-  console.log(`🚀 Server running on port ${port}`);
-  console.log(`📡 Environment: ${isProduction ? 'PRODUCTION' : 'DEVELOPMENT'}`);
-  console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ')}`);
-  console.log(`🔗 Health check: http://localhost:${port}/health`);
-  console.log(`🤖 AI endpoint: http://localhost:${port}/askAi`);
-});
+  console.log(`🚀 Server running on port ${port}`)
+  console.log(`🌐 Allowed CORS origins:`, allowedOrigins)
+  console.log(`🔗 Health: https://blog-backend-6-k4g8.onrender.com/health`)
+  console.log(`🔗 Test CORS: https://blog-backend-6-k4g8.onrender.com/test-cors`)
+})
