@@ -1,21 +1,34 @@
 {
-  "name": "backend",
+  "name": "blog-backend",
   "version": "1.0.0",
-  "description": "",
+  "description": "Backend API for blog AI assistant",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon index.js",
-    "dev": "nodemon index.js"
+    "start": "node index.js",
+    "dev": "cross-env NODE_ENV=development nodemon index.js",
+    "dev:win": "set NODE_ENV=development&& nodemon index.js",
+    "prod": "cross-env NODE_ENV=production node index.js",
+    "prod:win": "set NODE_ENV=production&& node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=9.0.0"
+  },
+  "keywords": ["ai", "blog", "backend", "express", "cerebras"],
   "author": "",
   "license": "ISC",
   "dependencies": {
     "@cerebras/cerebras_cloud_sdk": "^1.59.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.3",
-    "express": "^5.1.0",
-    "nodemon": "^3.1.11"
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "nodemon": "^3.0.1"
   }
 }
