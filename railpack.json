@@ -1,0 +1,11 @@
+{
+  "build": {
+    "language": "Node",
+    "root": "backend",
+    "commands": {
+      "install": "npm install",
+      "build": "",
+      "start": "node index.js"
+    }
+  }
+}
