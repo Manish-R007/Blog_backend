@@ -39,13 +39,14 @@ if (isProduction) {
   allowedOrigins.push(
     'http://localhost:5173',
     'http://localhost:3000',
-    'http://localhost:5174'
+    'http://localhost:5174',
+    'https://blog-backend-4-jqh7.onrender.com'
   )
   console.log('🚀 Development mode - CORS allows localhost')
 }
 
 // Add Railway domain for testing
-allowedOrigins.push('https://blogbackend-production-7dfc.up.railway.app')
+allowedOrigins.push('https://blog-backend-4-jqh7.onrender.com')
 
 const corsOptions = {
   origin: function (origin, callback) {
