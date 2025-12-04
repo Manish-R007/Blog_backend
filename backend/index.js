@@ -21,7 +21,7 @@ const allowedOrigins = [
   'https://blog-backend-6-k4g8.onrender.com',
   
   // Your frontend when deployed
-  'https://frontendaiblog.vercel.app'
+  'https://aiblogapp-flame.vercel.app'
 ];
 
 console.log('🌐 CORS Allowed Origins:', allowedOrigins);
